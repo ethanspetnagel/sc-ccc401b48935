@@ -70,7 +70,8 @@
 <div class="note" id="note"></div>
 <div class="bar">
   <button id="more">Show more</button>
-  <button id="export">Download favourites</button>
+  <button id="export">Download favourites as SVG</button>
+  <button id="savelist">Save favourites list</button>
   <button id="drop" class="danger">Delete this style</button>
   <span id="hidden" class="hid"></span>
 </div>
@@ -197,7 +198,7 @@ function cell(s) {
   const d = document.createElement('div');
   d.className = 'cell' + (FAVS.has(s.id) ? ' fav' : '');
   d.innerHTML = `<svg viewBox="0 0 100 100"><path d="${s.d}" fill="currentColor" fill-rule="evenodd"/></svg>
-    <div class="id">${s.id}</div>
+    <div class="id">${s.id}${s.a ? ' · ' + s.a : ''}</div>
     <button class="star" title="Favourite">★</button>
     <button class="dl" title="Download SVG">↓</button>`;
   d.querySelector('.star').onclick = () => {
@@ -223,6 +224,17 @@ document.getElementById('drop').onclick = () => {
   if (!confirm(`Hide the ${st.name} style?\n\nYou can restore it from the bar.`)) return;
   HIDDEN.add(current); saveHidden(); boot();
 };
+document.getElementById('savelist').onclick = () => {
+  if (!FAVS.size) { alert('Nothing starred yet.'); return; }
+  // favourites live in this browser; this is how they get back to the engine
+  const blob = JSON.stringify({saved: new Date().toISOString(),
+                               ids: [...FAVS]}, null, 1);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([blob], {type: 'application/json'}));
+  a.download = 'shape-favourites.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+
 document.getElementById('export').onclick = async () => {
   if (!FAVS.size) { alert('Nothing starred yet.'); return; }
   for (const id of FAVS) {
