@@ -52,6 +52,15 @@
         color:var(--ink); }
   .dl:hover { opacity:.7; }
   .empty { grid-column:1/-1; color:var(--dim); padding:40px 0; text-align:center; }
+  .src { display:none; gap:16px; align-items:flex-end; padding:16px 22px 0; }
+  .src.on { display:flex; }
+  .src figure { margin:0; }
+  .src img, .src svg { display:block; height:132px; width:auto; max-width:220px;
+    background:#fff; border:1px solid var(--line); border-radius:8px; padding:6px;
+    object-fit:contain; }
+  .src figcaption { font:11px ui-monospace,Menlo,monospace; color:var(--dim);
+    letter-spacing:.06em; text-transform:uppercase; margin-top:6px; }
+  .src .arrow { color:var(--dim); font-size:22px; padding-bottom:34px; }
   :focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
 </style></head><body>
 <header>
@@ -65,6 +74,7 @@
   <button id="drop" class="danger">Delete this style</button>
   <span id="hidden" class="hid"></span>
 </div>
+<div id="src" class="src"></div>
 <main id="grid"><p class="empty">Loading…</p></main>
 <script>
 const PAGE_SIZE = 48;
@@ -124,6 +134,7 @@ async function show(code) {
 
   if (code === '_fav') {
     note.textContent = 'Everything you have starred, kept in this browser.';
+    showSource(null);
     const byStyle = {};
     [...FAVS].forEach(id => (byStyle[id.split('-')[0]] ||= []).push(id));
     pool = [];
@@ -144,9 +155,27 @@ async function show(code) {
 
   const st = STYLES.find(s => s.code === code);
   note.textContent = st.name + ' — ' + st.note;
+  showSource(st);
   pool = await load(code);
   grid.innerHTML = '';
   reveal();
+}
+
+function showSource(st) {
+  const el = document.getElementById('src');
+  if (!st || !st.source) { el.className = 'src'; el.innerHTML = ''; return; }
+  el.className = 'src on';
+  el.innerHTML =
+    `<figure><img src="${st.source.img}" alt="source plate">
+       <figcaption>source plate</figcaption></figure>
+     <div class="arrow">&rarr;</div>
+     <figure><svg viewBox="0 0 100 100"><path d="${st.source.trace || ''}"
+        fill="currentColor" fill-rule="evenodd"/></svg>
+       <figcaption>traced</figcaption></figure>
+     <div class="arrow">&rarr;</div>
+     <figure style="align-self:center"><figcaption style="margin:0">
+       variations below &mdash; one axis each:<br>weight · width · slant · pose · counter · proportion
+     </figcaption></figure>`;
 }
 
 function reveal() {
