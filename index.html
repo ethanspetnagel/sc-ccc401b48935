@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shape Catalogue</title>
+<style>
+  :root { --paper:#f3f3ec; --ink:#000; --dim:#8b8b83; --line:#dcdcd2;
+          --panel:#fff; --star:#c8a200; }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper:#131311; --ink:#f2f2ea; --dim:#7c7c74; --line:#2a2a26;
+            --panel:#1b1b18; --star:#e8bf2e; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink);
+         font:15px/1.5 -apple-system,BlinkMacSystemFont,sans-serif; }
+  header { position:sticky; top:0; z-index:9; background:var(--paper);
+           border-bottom:1px solid var(--line); padding:14px 22px 0; }
+  h1 { margin:0 0 3px; font-size:17px; letter-spacing:-.02em; }
+  h1 span { color:var(--dim); font-weight:400; font-size:13px; margin-left:8px; }
+  nav { display:flex; gap:3px; flex-wrap:wrap; padding:10px 0 0; }
+  nav button { font:inherit; font-size:12px; letter-spacing:.04em; padding:6px 10px;
+    border:1px solid transparent; border-bottom:none; background:none;
+    color:var(--dim); cursor:pointer; border-radius:5px 5px 0 0; }
+  nav button:hover { color:var(--ink); }
+  nav button.on { background:var(--panel); border-color:var(--line);
+    color:var(--ink); font-weight:600; }
+  .note { color:var(--dim); font-size:13px; padding:12px 22px 0; }
+  .bar { display:flex; gap:8px; align-items:center; padding:12px 22px 0;
+         flex-wrap:wrap; }
+  .bar button { font:inherit; font-size:13px; padding:7px 12px; border-radius:7px;
+    border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    cursor:pointer; }
+  .bar button:hover { border-color:var(--ink); }
+  .bar button.danger:hover { border-color:#c2402b; color:#c2402b; }
+  .hid { color:var(--dim); font-size:12px; margin-left:auto; }
+  .hid button { font:inherit; font-size:12px; background:none; border:none;
+    color:var(--dim); text-decoration:underline; cursor:pointer; padding:2px 4px; }
+  .hid button:hover { color:var(--ink); }
+  main { display:grid; gap:14px; padding:18px 22px 70px;
+         grid-template-columns:repeat(auto-fill,minmax(112px,1fr)); }
+  .cell { background:var(--panel); border:1px solid var(--line); border-radius:9px;
+          padding:9px; text-align:center; position:relative; }
+  .cell svg { width:100%; height:auto; display:block; }
+  .cell .id { font:11px ui-monospace,Menlo,monospace; color:var(--dim);
+              margin-top:6px; letter-spacing:.02em; }
+  .star { position:absolute; top:5px; right:6px; border:none; background:none;
+          cursor:pointer; font-size:15px; line-height:1; opacity:.22; padding:2px; }
+  .star:hover { opacity:.65; }
+  .cell.fav .star { opacity:1; color:var(--star); }
+  .cell.fav { border-color:var(--star); }
+  .dl { position:absolute; top:5px; left:6px; border:none; background:none;
+        cursor:pointer; font-size:12px; line-height:1; opacity:.2; padding:2px;
+        color:var(--ink); }
+  .dl:hover { opacity:.7; }
+  .empty { grid-column:1/-1; color:var(--dim); padding:40px 0; text-align:center; }
+  :focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+</style></head><body>
+<header>
+  <h1>Shape Catalogue <span id="sub"></span></h1>
+  <nav id="tabs"></nav>
+</header>
+<div class="note" id="note"></div>
+<div class="bar">
+  <button id="more">Show more</button>
+  <button id="export">Download favourites</button>
+  <button id="drop" class="danger">Delete this style</button>
+  <span id="hidden" class="hid"></span>
+</div>
+<main id="grid"><p class="empty">Loading…</p></main>
+<script>
+const PAGE_SIZE = 48;
+let STYLES = [], current = null, pool = [], shown = 0;
+let FAVS = new Set(JSON.parse(localStorage.getItem('favs') || '[]'));
+let HIDDEN = new Set(JSON.parse(localStorage.getItem('hidden') || '[]'));
+const cache = {};
+
+const saveFavs = () => localStorage.setItem('favs', JSON.stringify([...FAVS]));
+const saveHidden = () => localStorage.setItem('hidden', JSON.stringify([...HIDDEN]));
+
+async function boot() {
+  const idx = await (await fetch('data/index.json')).json();
+  STYLES = idx.styles;
+  const tabs = document.getElementById('tabs');
+  tabs.innerHTML = '';
+  const mk = (code, label) => {
+    const b = document.createElement('button');
+    b.textContent = label; b.dataset.code = code;
+    b.onclick = () => show(code); tabs.appendChild(b);
+  };
+  mk('_fav', '★ Favourites');
+  STYLES.filter(s => !HIDDEN.has(s.code)).forEach(s => mk(s.code, s.code));
+  renderHidden();
+  const live = STYLES.filter(s => !HIDDEN.has(s.code));
+  if (live.length) show(live[0].code);
+  else document.getElementById('grid').innerHTML =
+    '<p class="empty">Every style is hidden. Restore one below.</p>';
+}
+
+function renderHidden() {
+  const el = document.getElementById('hidden');
+  if (!HIDDEN.size) { el.textContent = ''; return; }
+  el.innerHTML = HIDDEN.size + ' hidden: ';
+  [...HIDDEN].forEach(code => {
+    const b = document.createElement('button');
+    b.textContent = code; b.title = 'Restore ' + code;
+    b.onclick = () => { HIDDEN.delete(code); saveHidden(); boot(); };
+    el.appendChild(b);
+  });
+}
+
+async function load(code) {
+  if (!cache[code]) cache[code] = await (await fetch(`data/${code}.json`)).json();
+  return cache[code];
+}
+
+async function show(code) {
+  current = code; shown = 0;
+  document.querySelectorAll('nav button').forEach(b =>
+    b.classList.toggle('on', b.dataset.code === code));
+  const grid = document.getElementById('grid');
+  const note = document.getElementById('note');
+  grid.innerHTML = '<p class="empty">Loading…</p>';
+  document.getElementById('drop').style.display = code === '_fav' ? 'none' : '';
+  document.getElementById('more').style.display = code === '_fav' ? 'none' : '';
+
+  if (code === '_fav') {
+    note.textContent = 'Everything you have starred, kept in this browser.';
+    const byStyle = {};
+    [...FAVS].forEach(id => (byStyle[id.split('-')[0]] ||= []).push(id));
+    pool = [];
+    for (const st of Object.keys(byStyle)) {
+      const rows = await load(st);
+      pool.push(...rows.filter(r => FAVS.has(r.id)));
+    }
+    grid.innerHTML = '';
+    if (!pool.length) {
+      grid.innerHTML = '<p class="empty">Nothing starred yet.</p>';
+      document.getElementById('sub').textContent = '0 starred';
+      return;
+    }
+    pool.forEach(s => grid.appendChild(cell(s)));
+    document.getElementById('sub').textContent = pool.length + ' starred';
+    return;
+  }
+
+  const st = STYLES.find(s => s.code === code);
+  note.textContent = st.name + ' — ' + st.note;
+  pool = await load(code);
+  grid.innerHTML = '';
+  reveal();
+}
+
+function reveal() {
+  const grid = document.getElementById('grid');
+  const next = pool.slice(shown, shown + PAGE_SIZE);
+  next.forEach(s => grid.appendChild(cell(s)));
+  shown += next.length;
+  document.getElementById('sub').textContent = shown + ' of ' + pool.length;
+  document.getElementById('more').disabled = shown >= pool.length;
+  document.getElementById('more').textContent =
+    shown >= pool.length ? 'That is all of them' : 'Show more';
+}
+
+function svgFor(s) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="60mm" viewBox="0 0 100 100"><path d="${s.d}" fill="#000000" fill-rule="evenodd"/></svg>`;
+}
+
+function cell(s) {
+  const d = document.createElement('div');
+  d.className = 'cell' + (FAVS.has(s.id) ? ' fav' : '');
+  d.innerHTML = `<svg viewBox="0 0 100 100"><path d="${s.d}" fill="currentColor" fill-rule="evenodd"/></svg>
+    <div class="id">${s.id}</div>
+    <button class="star" title="Favourite">★</button>
+    <button class="dl" title="Download SVG">↓</button>`;
+  d.querySelector('.star').onclick = () => {
+    FAVS.has(s.id) ? FAVS.delete(s.id) : FAVS.add(s.id);
+    saveFavs();
+    d.classList.toggle('fav', FAVS.has(s.id));
+    if (current === '_fav' && !FAVS.has(s.id)) d.remove();
+  };
+  d.querySelector('.dl').onclick = () => download(s.id + '.svg', svgFor(s));
+  return d;
+}
+
+function download(name, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type: 'image/svg+xml'}));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+document.getElementById('more').onclick = reveal;
+document.getElementById('drop').onclick = () => {
+  const st = STYLES.find(s => s.code === current);
+  if (!confirm(`Hide the ${st.name} style?\n\nYou can restore it from the bar.`)) return;
+  HIDDEN.add(current); saveHidden(); boot();
+};
+document.getElementById('export').onclick = async () => {
+  if (!FAVS.size) { alert('Nothing starred yet.'); return; }
+  for (const id of FAVS) {
+    const rows = await load(id.split('-')[0]);
+    const s = rows.find(r => r.id === id);
+    if (s) { download(id + '.svg', svgFor(s)); await new Promise(r => setTimeout(r, 120)); }
+  }
+};
+boot();
+</script></body></html>
